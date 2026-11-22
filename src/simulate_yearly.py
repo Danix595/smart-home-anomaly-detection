@@ -1,18 +1,32 @@
 from pathlib import Path
+from typing import Optional
 import numpy as np
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def simulate_yearly_data(days: int = 365, seed: int = 42) -> pd.DataFrame:
-    """Genera telemetría sintética minuto a minuto con rutinas realistas por bloques diarios."""
+def simulate_yearly_data(
+    days: int = 365,
+    seed: int = 42,
+    end_date: Optional[str] = None,
+) -> pd.DataFrame:
+    """Genera telemetría sintética minuto a minuto con rutinas realistas por bloques diarios.
+
+    Alinea siempre el inicio a medianoche (00:00) para que los desplazamientos diarios
+    (`d0 + minutos`) coincidan exactamente con la hora del reloj independientemente de la
+    hora local o zona horaria de ejecución.
+    """
     rng_np = np.random.default_rng(seed)
 
-    # Exactamente days * 1440 minutos (525.600 filas para days=365)
+    # Exactamente days * 1440 minutos (525.600 filas para days=365), empezando a las 00:00
     n = days * 24 * 60
-    end = pd.Timestamp.now().floor("min")
-    start = end - pd.Timedelta(minutes=n - 1)
+    end_midnight = (
+        pd.Timestamp(end_date).normalize()
+        if end_date is not None
+        else pd.Timestamp.now().normalize()
+    )
+    start = end_midnight - pd.Timedelta(days=days)
     timestamps = pd.date_range(start=start, periods=n, freq="1min")
 
     df = pd.DataFrame({"timestamp": timestamps})

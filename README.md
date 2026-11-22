@@ -69,11 +69,11 @@ El repositorio incluye un simulador anual por bloques realistas ([`src/simulate_
 
 | Métrica | Resultado reproducible (`python -m src.models.evaluate`) |
 | :--- | :--- |
-| **Precision (IA)** | **85,05 %** (`TP: 2.100 · FP: 369`) |
+| **Precision (IA)** | **84,75 %** (`TP: 2.100 · FP: 378`) |
 | **Recall (IA)** | **100,00 %** (`FN: 0` en los 6 escenarios conductuales) |
-| **F1-Score** | **0,9192** |
-| **FPR (Falsos Positivos)** | **0,358 %** (`TN: 102.651`) |
-| **ROC-AUC / PR-AUC** | **0,9984** / **0,8850** |
+| **F1-Score** | **0,9174** |
+| **FPR (Falsos Positivos)** | **0,367 %** (`TN: 102.642`) |
+| **ROC-AUC / PR-AUC** | **0,9987** / **0,9150** |
 | **Latencia `POST /detect` (reglas)** | **4,21 ms** media (`P95: 4,61 ms · Máx: 6,46 ms`, n=200) |
 | **Latencia `POST /detect` (reglas + IA)** | **9,84 ms** media (`P95: 10,18 ms · Máx: 21,87 ms`, n=200) |
 | **Suite de tests (`pytest`)** | **27 tests en verde** (API, auth, reglas, *Deep Update*, Telegram, ML) |

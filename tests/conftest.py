@@ -15,7 +15,7 @@ from src.simulate_yearly import simulate_yearly_data
 def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Entrena un Isolation Forest ligero una sola vez por sesión de tests."""
     model_dir = tmp_path_factory.mktemp("models")
-    df = simulate_yearly_data(days=14, seed=42)
+    df = simulate_yearly_data(days=14, seed=42, end_date="2026-07-02")
     train_and_save(df, contamination=0.004, n_estimators=100, max_samples=1024, random_state=42, model_dir=model_dir)
     return model_dir
 

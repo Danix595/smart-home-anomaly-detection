@@ -20,8 +20,10 @@ from src.simulate_yearly import simulate_yearly_data
 
 def test_simulator_produces_exact_rows_and_realistic_routines():
     days = 7
-    df = simulate_yearly_data(days=days, seed=42)
+    df = simulate_yearly_data(days=days, seed=42, end_date="2026-07-02")
     assert len(df) == days * 1440
+    # Siempre alineado a medianoche 00:00
+    assert df["timestamp"].iloc[0].hour == 0 and df["timestamp"].iloc[0].minute == 0
     for col in ["timestamp"] + SENSOR_COLUMNS:
         assert col in df.columns
     assert not df.isna().any().any()
@@ -92,7 +94,7 @@ def test_detector_raises_on_missing_or_outdated_model(tmp_path: Path):
 
 
 def test_evaluate_pipeline_smoke_test():
-    df = simulate_yearly_data(days=20, seed=42)
+    df = simulate_yearly_data(days=30, seed=42, end_date="2026-07-02")
     res = evaluate_pipeline(df, contamination=0.004, anomaly_ratio=0.02, seed=42)
     assert res["roc_auc"] > 0.95
     assert res["f1"] > 0.75
