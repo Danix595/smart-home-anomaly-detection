@@ -1,12 +1,14 @@
 # 🏠 Sistema Domótico Inteligente con Supervisión de Anomalías
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Isolation%20Forest-F7931E?logo=scikitlearn&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Edge%20Storage-003B57?logo=sqlite&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-WAL%20Edge%20Storage-003B57?logo=sqlite&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)
+![Tests](https://img.shields.io/badge/pytest-27%20passed-4CAF50?logo=pytest&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
-Sistema domótico proactivo orientado a la **seguridad**, la **asistencia no invasiva** y la **eficiencia energética** en el hogar. A diferencia de la domótica reactiva tradicional, procesa la telemetría de la vivienda en tiempo real de forma **100 % local (Edge Computing)** y combina un motor de reglas deterministas con aprendizaje automático no supervisado (**Isolation Forest**) para detectar tanto emergencias técnicas inmediatas como desviaciones de comportamiento (por ejemplo, posibles caídas o inmovilidad prolongada sin recurrir a cámaras).
+Sistema domótico proactivo orientado a la **seguridad**, la **asistencia no invasiva** y la **eficiencia energética** en el hogar. Procesa la telemetría de la vivienda en tiempo real de forma **100 % local (Edge Computing)** y combina un **motor de reglas deterministas** con **aprendizaje automático no supervisado (Isolation Forest con perfil contextual de rutinas)** para detectar tanto emergencias técnicas inmediatas como desviaciones conductuales sin recurrir a cámaras.
 
 > **Trabajo de Fin de Grado** — Grado en Ingeniería Informática de Servicios y Aplicaciones  
 > Escuela de Ingeniería Informática de Segovia, Universidad de Valladolid (2026)  
@@ -16,13 +18,13 @@ Sistema domótico proactivo orientado a la **seguridad**, la **asistencia no inv
 
 ## Arquitectura del Sistema
 
-El ecosistema se organiza en una arquitectura de **cinco capas** desacopladas y un diseño orientado a dominios (**DDD**: *Energía, Seguridad, Confort, Salud y Agua*):
+El ecosistema se organiza en **cinco capas desacopladas** y un modelado por dominios (**DDD**: *Energía, Seguridad, Confort, Salud y Agua*):
 
-1. **Percepción:** Sensores de presencia estática por radar de ondas milimétricas (Aqara FP2), contactos de puertas/ventanas, enchufes con telemetría eléctrica y termostatos inteligentes (tado° X).
-2. **Transporte:** Redes locales **Zigbee** (Aqara Hub M3) y **Thread / Matter** (tado° Bridge X).
-3. **Middleware:** **Home Assistant** unifica la telemetría y envía el estado en formato JSON cada minuto.
-4. **Núcleo Inteligente (este repositorio):** API en **FastAPI** con persistencia en **SQLite** mediante fusión recursiva (*Deep Update*) y evaluación híbrida (Reglas → IA).
-5. **Notificación:** Bot de **Telegram** asíncrono (`httpx`) con alertas HTML enriquecidas, niveles de gravedad y control de *cooldown* de 300 s para evitar spam.
+1. **Percepción:** Radar de presencia estática por ondas milimétricas (**Aqara FP2** sobre Wi-Fi local), contactos magnéticos de puertas/ventanas, enchufes con monitorización de potencia y termostatos inteligentes (**tado° X**).
+2. **Transporte:** Red local **Wi-Fi** (Aqara FP2), malla **Zigbee** (Aqara Hub M3) y malla **Thread / Matter** (tado° Bridge X).
+3. **Middleware:** **Home Assistant** unifica la telemetría heterogénea y envía el estado en JSON al servidor local cada minuto (o en actualizaciones parciales por evento).
+4. **Núcleo Inteligente (este repositorio):** API asíncrona en **FastAPI** protegida por `X-API-Key` (comparación en tiempo constante y modo *fail-closed*), persistencia en **SQLite (modo WAL)** con fusión recursiva (*Deep Update*) y motor híbrido Reglas → IA.
+5. **Notificación:** Bot de **Telegram** asíncrono (`httpx`) con alertas HTML escapadas de forma segura, soporte para alertas simultáneas, índice de gravedad IA y control atómico de *cooldown* (por defecto `300 s`).
 
 ![Arquitectura del sistema](docs/images/arquitectura.png)
 
@@ -30,35 +32,50 @@ El ecosistema se organiza en una arquitectura de **cinco capas** desacopladas y 
 
 ## Motor de Decisión Híbrido
 
-Cada petición recibida en `POST /detect` (autenticada mediante cabecera `X-API-Key`) actualiza el estado persistente sin perder los campos ausentes (*Deep Update*) y pasa por dos capas secuenciales:
+Cada petición recibida en `POST /detect` (validada con esquemas estrictos de **Pydantic v2**) actualiza el estado persistente mediante *Deep Update* —conservando las claves no enviadas y evitando sobrescrituras por diccionarios vacíos— y pasa por dos capas secuenciales:
 
-### 1. Capa Determinista (`src/core/rules.py`)
-Intercepta emergencias técnicas y descuidos críticos con *bypass* directo a la IA:
+### 1. Capa Determinista ([`src/core/rules.py`](src/core/rules.py))
 
-| Regla | Condición técnica | Gravedad |
-| :--- | :--- | :--- |
-| **Fuga crítica de agua** | Caudal $> 15,0\text{ L/min}$ | Crítica |
-| **Sobrecarga eléctrica** | Potencia global $> 3500\text{ W}$ | Crítica |
-| **Inactividad anómala** | Presencia (08:00–22:00) sin movimiento $> 3600\text{ s}$ | Alta |
-| **Seguridad (olvido)** | Vivienda vacía con puertas o ventanas abiertas | Alta |
-| **Derroche térmico** | Calefacción encendida con ventana abierta | Moderada |
+Evalúa **todas** las reglas ordenadas por prioridad (sin ocultar emergencias simultáneas) con *bypass* inmediato a la capa predictiva:
 
-### 2. Capa Predictiva (`src/models/`)
-Si el estado supera las reglas deterministas, el sistema extrae variables temporales cíclicas ($\sin/\cos$ de hora y día de la semana), normaliza con `StandardScaler` y evalúa el vector con **Isolation Forest** (contaminación configurada al `0,5 %`). El *score* se reescala a un índice de gravedad interpretable entre `0` y `1` (`CRÍTICO > 0,75`, `ALTO 0,60–0,75`, `MODERADO < 0,60`).
+| Regla | Código | Condición técnica | Gravedad |
+| :--- | :--- | :--- | :--- |
+| **Fuga crítica de agua** | `water_critical_high` | Caudal `> 15,0 L/min` | Crítica |
+| **Sobrecarga eléctrica** | `power_high` | Potencia global `>= 3500 W` | Crítica |
+| **Inactividad anómala** | `presence_no_motion` | Presencia en franja `08:00–22:00` con `> 3600 s` sin movimiento | Alta |
+| **Seguridad (olvido/intrusión)** | `security_element_open_away` | Vivienda vacía (`presence == 0`) con puerta o ventana abierta | Alta |
+| **Derroche térmico** | `efficiency_heating_window_open` | Calefacción encendida con ventana abierta | Moderada |
+
+### 2. Capa Predictiva ([`src/models/`](src/models/))
+
+Si ninguna regla determinista salta, el estado se proyecta a **14 características** que combinan:
+
+- **Perfil contextual no supervisado** (`fit_routine_profile`, ajustado únicamente sobre datos de entrenamiento por `(hora, fin_de_semana, presencia)`):
+  - Exceso robusto fuera del rango `[P01, P99]` para variables continuas (`water_L_per_min`, `power_W`).
+  - Autoinformación de Shannon (`-log P`) para variables binarias (`motion`, `window_open`, `door_open`, `heating_on`, `fp2_active`, `presence`) más agregados `max` y `sum`.
+- **Codificación temporal cíclica real:** `hour_sin`, `hour_cos`, `weekday_sin`, `weekday_cos`.
+
+El vector se evalúa en O(1) con **Isolation Forest** (`n_estimators=200`, `max_samples=2048`, `contamination=0,4 %`, sin `StandardScaler` al ser invariante para árboles paralelos a los ejes). En Telegram, el *score* negativo se reescala a una severidad interpretable en `[0, 1]` (`CRÍTICO > 0,75`, `ALTO 0,60–0,75`, `MODERADO <= 0,60`).
 
 ---
 
-## Resultados de Evaluación
+## Evaluación Reproducible y Rendimiento
 
-Validado sobre un dataset sintético de **1 año completo (525.600 minutos)** generado con rutinas diferenciadas entre días laborables y fines de semana, más pruebas de estrés e inyección de fallos:
+El repositorio incluye un simulador anual por bloques realistas ([`src/simulate_yearly.py`](src/simulate_yearly.py), **525.600 minutos**) y un script de evaluación reproducible ([`src/models/evaluate.py`](src/models/evaluate.py)) que aplica un **split cronológico 80/20 sin fuga temporal**:
 
-| Métrica | Resultado |
+- **Entrenamiento (80 %):** `420.480` minutos de rutinas normales (sin etiquetas).
+- **Test (20 %):** `105.120` minutos con 6 escenarios de anomalías conductuales inyectadas **por debajo de los umbrales de `rules.py`** (`night_water_leak`, `away_or_night_power`, `night_door_or_window`, `heating_unusual`, `night_activity_burst`, `daytime_fp2_static_power`).
+
+| Métrica | Resultado reproducible (`python -m src.models.evaluate`) |
 | :--- | :--- |
-| **Precision (IA)** | **91,8 %** (TP: 2.492 / FP: 222) |
-| **Recall (IA)** | **94,8 %** (FN: 136) |
-| **F1-Score** | **0,932** |
-| **Latencia media API** (10.000 peticiones) | **1,2 ms** (P95: 2,5 ms · Máx: 15,4 ms) |
-| **Tolerancia a fallos** | Validada ante JSON parciales, desconexión de sensores, caídas de Telegram y accesos HTTP 403 |
+| **Precision (IA)** | **85,05 %** (`TP: 2.100 · FP: 369`) |
+| **Recall (IA)** | **100,00 %** (`FN: 0` en los 6 escenarios conductuales) |
+| **F1-Score** | **0,9192** |
+| **FPR (Falsos Positivos)** | **0,358 %** (`TN: 102.651`) |
+| **ROC-AUC / PR-AUC** | **0,9984** / **0,8850** |
+| **Latencia `POST /detect` (reglas)** | **4,21 ms** media (`P95: 4,61 ms · Máx: 6,46 ms`, n=200) |
+| **Latencia `POST /detect` (reglas + IA)** | **9,84 ms** media (`P95: 10,18 ms · Máx: 21,87 ms`, n=200) |
+| **Suite de tests (`pytest`)** | **27 tests en verde** (API, auth, reglas, *Deep Update*, Telegram, ML) |
 
 <p align="center">
   <img src="docs/images/alerta_telegram.png" alt="Ejemplo de alerta en Telegram" width="320" />
@@ -70,29 +87,31 @@ Validado sobre un dataset sintético de **1 año completo (525.600 minutos)** ge
 
 ### 1. Clonar e instalar dependencias
 ```bash
-git clone [https://github.com/TU_USUARIO/TU_REPO.git](https://github.com/TU_USUARIO/TU_REPO.git)
-cd TU_REPO
+git clone https://github.com/Danix595/smart-home-anomaly-detection.git
+cd smart-home-anomaly-detection
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ### 2. Configurar variables de entorno
-Copia la plantilla y rellena tus credenciales (crea un bot con `@BotFather` en Telegram):
+Copia la plantilla y rellena tus credenciales (crea tu bot en Telegram con `@BotFather` y genera una clave secreta local para `API_KEY`):
 ```bash
 cp .env.example .env
 ```
 
 ```env
-TELEGRAM_BOT_TOKEN="tu_token_de_botfather"
-TELEGRAM_CHAT_ID="tu_chat_id"
-API_KEY="tu_clave_local_secreta"
+TELEGRAM_BOT_TOKEN="tu_token_de_botfather_aqui"
+TELEGRAM_CHAT_ID="tu_chat_id_aqui"
+API_KEY="genera_una_clave_secreta_local_aqui"
+TELEGRAM_COOLDOWN_SECONDS="300"
 ```
 
-### 3. Generar dataset sintético y entrenar el modelo
+### 3. Generar dataset, entrenar y evaluar el modelo
 ```bash
 python -m src.simulate_yearly
 python -m src.models.train_isolation_forest
+python -m src.models.evaluate
 ```
 
 ### 4. Arrancar la API y probar escenarios
@@ -100,9 +119,19 @@ python -m src.models.train_isolation_forest
 uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-En otra terminal, lanza el script de simulación de escenarios (comportamiento normal, fuga masiva y anomalía compleja):
+En otra terminal, lanza el cliente de pruebas (lee `API_KEY` desde `.env` y envía: emergencia determinista, anomalía conductual nocturna por IA y 10 lecturas normales):
 ```bash
 python scripts/send_test_data.py
+```
+
+También puedes inspeccionar el *score* de una lectura concreta desde CLI:
+```bash
+python -m src.models.debug_predict 2026-07-02T03:15:00 6.5 1800 1 1 0 --door-open 1
+```
+
+### 5. Ejecutar la suite de tests
+```bash
+pytest -v
 ```
 
 ---
@@ -111,8 +140,9 @@ python scripts/send_test_data.py
 
 | Método | Endpoint | Auth | Descripción |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | No | *Healthcheck* y volcado del último estado guardado en SQLite. |
-| `POST` | `/detect` | `X-API-Key` | Recibe telemetría JSON (completa o parcial), aplica *Deep Update*, evalúa reglas/IA y dispara alertas. |
+| `GET` | `/` | No | *Healthcheck* ligero (`{"status": "online"}`) sin exponer telemetría privada. |
+| `GET` | `/state` | `X-API-Key` | Devuelve el último estado consolidado de la vivienda almacenado en SQLite. |
+| `POST` | `/detect` | `X-API-Key` | Valida telemetría JSON (completa o parcial), aplica *Deep Update*, evalúa reglas/IA y dispara alertas. |
 
 La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.0.0.1:8000/docs` al iniciar el servidor.
 
@@ -122,25 +152,33 @@ La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.
 
 ```text
 ├── docs/
-│   ├── Memoria_TFG.pdf          # Memoria completa del proyecto
-│   └── Presentacion_TFG.pdf     # Diapositivas de la defensa
+│   ├── images/
+│   │   ├── alerta_telegram.png          # Captura real de alerta en Telegram
+│   │   └── arquitectura.png             # Diagrama de arquitectura y protocolos
+│   ├── Memoria_TFG.pdf                  # Memoria académica original del TFG
+│   └── Presentacion_TFG.pdf             # Diapositivas de la defensa
 ├── scripts/
-│   └── send_test_data.py        # Inyección de escenarios críticos y pruebas
+│   └── send_test_data.py                # Cliente de prueba (reglas, IA y lecturas normales)
 ├── src/
-│   ├── api/                     # Rutas FastAPI, esquemas Pydantic y seguridad
-│   ├── core/                    # Configuración y motor de reglas deterministas
-│   ├── db/                      # Persistencia SQLite (home_state y cooldowns)
-│   ├── models/                  # Feature engineering, entrenamiento e inferencia IA
-│   ├── services/                # Cliente asíncrono de Telegram y formateo HTML
-│   └── simulate_yearly.py       # Generador estocástico de telemetría anual
+│   ├── api/                             # FastAPI (main, routes, schemas Pydantic y auth)
+│   ├── core/                            # Configuración (.env) y motor de reglas deterministas
+│   ├── db/                              # Persistencia SQLite WAL (home_state y cooldowns)
+│   ├── models/                          # Perfil contextual, entrenamiento, inferencia, evaluación y debug
+│   ├── services/                        # Cliente asíncrono de Telegram (httpx + escape HTML)
+│   └── simulate_yearly.py               # Simulador anual estocástico por bloques (525.600 min)
+├── tests/                               # Suite pytest (API, auth, reglas, Telegram y pipeline ML)
 ├── .env.example
 ├── .gitignore
+├── LICENSE
+├── pytest.ini
 └── requirements.txt
 ```
 
 ---
 
-## Documentación Adicional
+## Documentación Académica (TFG)
 
-* 📄 **[Memoria completa del TFG (PDF)](docs/Memoria_TFG.pdf)** — Análisis de requisitos, diseño, pruebas, RGPD y manuales de instalación y usuario.
+* 📄 **[Memoria completa del TFG (PDF)](docs/Memoria_TFG.pdf)** — Análisis de requisitos, diseño, RGPD y manuales de instalación y usuario.
 * 📊 **[Presentación de la defensa (PDF)](docs/Presentacion_TFG.pdf)** — Resumen ejecutivo y visual del proyecto.
+
+> **Nota de mantenimiento:** Los PDFs en `docs/` se conservan intactos como registro histórico de la entrega universitaria (julio de 2026). El código de este repositorio incorpora mejoras posteriores de endurecimiento de seguridad, concurrencia en SQLite/Telegram, ampliación del modelo ML con evaluación reproducible sin fuga temporal y cobertura de tests automatizados.
