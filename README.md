@@ -24,9 +24,7 @@ El ecosistema se organiza en una arquitectura de **cinco capas** desacopladas y 
 4. **Núcleo Inteligente (este repositorio):** API en **FastAPI** con persistencia en **SQLite** mediante fusión recursiva (*Deep Update*) y evaluación híbrida (Reglas → IA).
 5. **Notificación:** Bot de **Telegram** asíncrono (`httpx`) con alertas HTML enriquecidas, niveles de gravedad y control de *cooldown* de 300 s para evitar spam.
 
-<!-- Descomenta estas líneas cuando subas las capturas a docs/images/
 ![Arquitectura del sistema](docs/images/arquitectura.png)
--->
 
 ---
 
@@ -62,9 +60,9 @@ Validado sobre un dataset sintético de **1 año completo (525.600 minutos)** ge
 | **Latencia media API** (10.000 peticiones) | **1,2 ms** (P95: 2,5 ms · Máx: 15,4 ms) |
 | **Tolerancia a fallos** | Validada ante JSON parciales, desconexión de sensores, caídas de Telegram y accesos HTTP 403 |
 
-<!-- Descomenta esta línea cuando subas la captura de Telegram a docs/images/
-![Ejemplo de alerta en Telegram](docs/images/alerta_telegram.png)
--->
+<p align="center">
+  <img src="docs/images/alerta_telegram.png" alt="Ejemplo de alerta en Telegram" width="320" />
+</p>
 
 ---
 
