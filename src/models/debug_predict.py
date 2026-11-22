@@ -46,7 +46,7 @@ def main() -> None:
         fp2_active=args.fp2_active,
         profile=meta["profile"],
     )
-    print("Vector contextual:", dict(zip(MODEL_FEATURE_COLUMNS, [round(v, 4) for v in x_vec[0]])))
+    print("Vector contextual:", dict(zip(MODEL_FEATURE_COLUMNS, [round(float(v), 4) for v in x_vec[0]])))
 
     result = predict_single(
         timestamp=args.timestamp,
