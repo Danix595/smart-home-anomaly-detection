@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    container_name: smart-home-anomaly-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_FILE: /app/storage/domotica.db
+    # Enlazado a localhost por seguridad cuando Home Assistant corre en el mismo Mini PC.
+    # Si Home Assistant está en otro equipo, usa un reverse proxy HTTPS delante.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - data_vol:/app/data
+      - models_vol:/app/models
+      - sqlite_data:/app/storage
+
+volumes:
+  data_vol:
+  models_vol:
+  sqlite_data:

@@ -1,0 +1,64 @@
+# Ejemplo de integración con Home Assistant.
+# 1. Añade en tu secrets.yaml de Home Assistant:
+#      domotica_api_key: "tu_misma_api_key_del_archivo_env"
+# 2. Adapta los entity_id a los sensores reales de tu vivienda.
+#
+# Nota técnica: el JSON se construye directamente en el `payload` con Jinja2 en lugar de
+# almacenarlo en un sensor intermedio para evitar el límite de 255 caracteres de los estados en HA.
+
+rest_command:
+  send_home_state:
+    url: "http://127.0.0.1:8000/detect"
+    method: POST
+    headers:
+      X-API-Key: !secret domotica_api_key
+      Content-Type: "application/json"
+    payload: >-
+      {
+        "timestamp": "{{ now().isoformat() }}",
+        "energy": {
+          "global_power_W": {{ states('sensor.potencia_global') | float(0) }},
+          "plugs_W": {
+            "enchufe_tv_aqara": {{ states('sensor.enchufe_tv_potencia') | float(0) }}
+          },
+          "lights_on": {
+            "luz_pasillo": {{ is_state('light.pasillo', 'on') | tojson }}
+          }
+        },
+        "health": {
+          "presence": {{ 1 if is_state('binary_sensor.presencia_casa', 'on') else 0 }},
+          "motion": {{ 1 if is_state('binary_sensor.movimiento_casa', 'on') else 0 }},
+          "fp2_zones": {
+            "zona_sofa": {{ is_state('binary_sensor.fp2_sofa', 'on') | tojson }},
+            "suelo_bano": {{ is_state('binary_sensor.fp2_suelo_bano', 'on') | tojson }}
+          }
+        },
+        "security": {
+          "doors_open": {
+            "puerta_principal": {{ is_state('binary_sensor.puerta_principal', 'on') | tojson }}
+          },
+          "windows_open": {
+            "ventana_salon": {{ is_state('binary_sensor.ventana_salon', 'on') | tojson }},
+            "ventana_bano": {{ is_state('binary_sensor.ventana_bano', 'on') | tojson }}
+          }
+        },
+        "comfort": {
+          "heating_on": {
+            "termostato_tado_salon": {{ (not is_state('climate.tado_salon', 'off')) | tojson }}
+          },
+          "target_temp": {
+            "termostato_tado_salon": {{ state_attr('climate.tado_salon', 'temperature') | float(21.0) }}
+          }
+        }
+      }
+
+# Automatización equivalente (para automations.yaml) que envía la telemetría cada minuto:
+automation:
+  - id: send_smart_home_telemetry_every_minute
+    alias: "Enviar telemetría domótica a la API de anomalías"
+    trigger:
+      - platform: time_pattern
+        minutes: "/1"
+    action:
+      - service: rest_command.send_home_state
+    mode: single

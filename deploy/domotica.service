@@ -1,0 +1,21 @@
+# Ejemplo de servicio systemd para despliegue nativo en Mini PC (Ubuntu/Debian).
+# Copiar a /etc/systemd/system/domotica.service, ajustar User y rutas, y ejecutar:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now domotica.service
+
+[Unit]
+Description=Smart Home Anomaly Detection API (FastAPI + Isolation Forest)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=usuario
+WorkingDirectory=/home/usuario/smart-home-anomaly-detection
+ExecStart=/home/usuario/smart-home-anomaly-detection/.venv/bin/uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

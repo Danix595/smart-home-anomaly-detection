@@ -4,8 +4,9 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Isolation%20Forest-F7931E?logo=scikitlearn&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-WAL%20Edge%20Storage-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)
-![Tests](https://img.shields.io/badge/pytest-27%20passed-4CAF50?logo=pytest&logoColor=white)
+[![CI](https://github.com/Danix595/smart-home-anomaly-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/Danix595/smart-home-anomaly-detection/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 Sistema domótico proactivo orientado a la **seguridad**, la **asistencia no invasiva** y la **eficiencia energética** en el hogar. Procesa la telemetría de la vivienda en tiempo real de forma **100 % local (Edge Computing)** y combina un **motor de reglas deterministas** con **aprendizaje automático no supervisado (Isolation Forest con perfil contextual de rutinas)** para detectar tanto emergencias técnicas inmediatas como desviaciones conductuales sin recurrir a cámaras.
@@ -134,6 +135,21 @@ python -m src.models.debug_predict 2026-07-02T03:15:00 6.5 1800 1 1 0 --door-ope
 pytest -v
 ```
 
+### 6. Despliegue en Mini PC (Docker o `systemd` + Home Assistant)
+
+Con **Docker Compose** (recomendado):
+```bash
+cp .env.example .env   # Configura API_KEY, TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
+docker compose up -d --build
+docker compose exec api python -m src.simulate_yearly
+docker compose exec api python -m src.models.train_isolation_forest
+docker compose restart api
+```
+
+Para despliegue nativo en Linux o integración con **Home Assistant**, consulta las plantillas listas en [`deploy/`](deploy/):
+* [`deploy/domotica.service`](deploy/domotica.service) — Servicio `systemd` con arranque automático (`--host 127.0.0.1 --workers 1`).
+* [`deploy/home_assistant.yaml`](deploy/home_assistant.yaml) — Configuración de `rest_command` (con plantilla Jinja2 directa para evitar el límite de 255 caracteres de los sensores en HA) y automatización cada minuto.
+
 ---
 
 ## Endpoints de la API
@@ -151,6 +167,12 @@ La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.
 ## Estructura del Repositorio
 
 ```text
+├── .github/
+│   └── workflows/
+│       └── ci.yml                       # Integración continua (compileall + pytest)
+├── deploy/
+│   ├── domotica.service                 # Plantilla de servicio systemd para Mini PC
+│   └── home_assistant.yaml              # Integración rest_command + automatización en HA
 ├── docs/
 │   ├── images/
 │   │   ├── alerta_telegram.png          # Captura real de alerta en Telegram
@@ -167,12 +189,25 @@ La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.
 │   ├── services/                        # Cliente asíncrono de Telegram (httpx + escape HTML)
 │   └── simulate_yearly.py               # Simulador anual estocástico por bloques (525.600 min)
 ├── tests/                               # Suite pytest (API, auth, reglas, Telegram y pipeline ML)
+├── .dockerignore
 ├── .env.example
 ├── .gitignore
+├── Dockerfile
 ├── LICENSE
+├── docker-compose.yml
 ├── pytest.ini
 └── requirements.txt
 ```
+
+---
+
+## Consideraciones para Producción y Roadmap
+
+El repositorio mantiene el esquema ligero de dos tablas (`home_state` y `cooldowns`) diseñado para el TFG. Para pasar de un despliegue doméstico de vivienda única a un entorno de producción real con sensores físicos 24/7, los siguientes pasos clave son:
+
+1. **Histórico de telemetría real para reentrenamiento:** añadir una tabla de histórico temporal (o exportación a Parquet/CSV) para recolectar 2–4 semanas de rutinas reales del residente y reentrenar el perfil contextual y el *Isolation Forest* con los hábitos verdaderos de esa vivienda.
+2. **Concurrencia multi-proceso:** actualmente el servidor debe ejecutarse con `--workers 1` porque los *locks* de estado y *cooldown* (`asyncio.Lock`) residen en memoria. Para escalar a múltiples viviendas/edificios, el paso natural es migrar a **PostgreSQL + Redis** (para *locks* distribuidos y *rate limiting*).
+3. **Cifrado en tránsito en LAN:** cuando Home Assistant y la API corren en el mismo Mini PC, el enlace se restringe a `127.0.0.1`. Si se despliegan en máquinas separadas, se recomienda situar un *reverse proxy* con **HTTPS/TLS** (Caddy o Nginx) delante de Uvicorn para proteger la cabecera `X-API-Key`.
 
 ---
 
