@@ -1,0 +1,20 @@
+# Secretos y entorno virtual
+.env
+.venv/
+venv/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Datos generados, BBDD y modelos entrenados
+data/*.csv
+*.db
+*.sqlite3
+models/*.joblib
+
+# Archivos de sistema y editores
+.DS_Store
+.vscode/
+.idea/
