@@ -100,8 +100,8 @@ def build_alert_text(
 
     # 4. Nivel de gravedad IA
     if reason_code.startswith("ml_") and score is not None:
-        # Normalizamos el score crudo de scikit-learn (típicamente hasta -0.35) a un rango [0, 1]
-        max_anomaly_score = 0.35
+        # Normalizamos el score crudo de scikit-learn (rango típico hasta -0,22) a [0, 1]
+        max_anomaly_score = 0.22
         gravedad = min(1.0, max(0.0, abs(min(score, 0.0)) / max_anomaly_score))
 
         etiqueta = "🔴 CRÍTICO" if gravedad > 0.75 else "🟠 ALTO" if gravedad > 0.60 else "🟡 MODERADO"

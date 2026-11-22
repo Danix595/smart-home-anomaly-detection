@@ -17,7 +17,7 @@ from src.db.database import (
     save_last_alert_time,
     save_state,
 )
-from src.models.detector import predict_single
+from src.models.detector import predict_from_state
 from src.services.telegram import build_alert_text, send_telegram_message
 
 logger = logging.getLogger("tfg_domotica")
@@ -85,22 +85,7 @@ async def detect(reading: Reading):
 
         # 2. Capa predictiva (IA): si las reglas deterministas están en orden, consultamos Isolation Forest
         if not is_anom:
-            water_val = current_state.get("water", {}).get("water_L_per_min", 0.0)
-            power_val = current_state.get("energy", {}).get("global_power_W", 0.0)
-            presence_val = current_state.get("health", {}).get("presence", 0)
-            motion_val = current_state.get("health", {}).get("motion", 0)
-            windows_open_dict = current_state.get("security", {}).get("windows_open", {})
-            window_open_val = 1 if any(windows_open_dict.values()) else 0
-
-            res = await run_in_threadpool(
-                predict_single,
-                current_timestamp,
-                water_val,
-                power_val,
-                presence_val,
-                motion_val,
-                window_open_val,
-            )
+            res = await run_in_threadpool(predict_from_state, current_timestamp, current_state)
             is_anom = res["prediction"] == -1
             reason = res.get("reason", "unknown") if is_anom else "normal"
             reasons = [reason] if is_anom else []
