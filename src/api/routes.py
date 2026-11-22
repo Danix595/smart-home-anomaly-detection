@@ -105,8 +105,14 @@ async def detect(reading: Reading):
 
     except Exception as e:
         logger.exception(f"Error procesando lectura: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error interno procesando la lectura.")
+
 
 @router.get("/")
 def root():
+    return {"status": "online"}
+
+
+@router.get("/state", dependencies=[Depends(get_api_key)])
+def read_state():
     return {"status": "online", "state": get_state()}
