@@ -1,4 +1,8 @@
-# 🏠 Sistema Domótico Inteligente con Supervisión de Anomalías
+# 🏠 Smart Home Anomaly Detection System
+
+<p align="center">
+  <strong>English</strong> · <a href="README.es.md">Español</a>
+</p>
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
@@ -9,84 +13,84 @@
 [![CI](https://github.com/Danix595/smart-home-anomaly-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/Danix595/smart-home-anomaly-detection/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-Sistema domótico proactivo orientado a la **seguridad**, la **asistencia no invasiva** y la **eficiencia energética** en el hogar. Procesa la telemetría de la vivienda en tiempo real de forma **100 % local (Edge Computing)** y combina un **motor de reglas deterministas** con **aprendizaje automático no supervisado (Isolation Forest con perfil contextual de rutinas)** para detectar tanto emergencias técnicas inmediatas como desviaciones conductuales sin recurrir a cámaras.
+Proactive smart home monitoring system focused on **home safety**, **non-invasive assisted living**, and **energy efficiency**. All telemetry is processed **100% locally (Edge Computing)**, combining a **deterministic rule engine** with **unsupervised machine learning (Isolation Forest over a contextual routine profile)** to catch both critical technical emergencies and unusual behavioral deviations without cameras or wearables.
 
-> **Trabajo de Fin de Grado** — Grado en Ingeniería Informática de Servicios y Aplicaciones  
-> Escuela de Ingeniería Informática de Segovia, Universidad de Valladolid (2026)  
-> **Autor:** Daniel López Iniesta
-
----
-
-## Arquitectura del Sistema
-
-El ecosistema se organiza en **cinco capas desacopladas** y un modelado por dominios (**DDD**: *Energía, Seguridad, Confort, Salud y Agua*):
-
-1. **Percepción:** Radar de presencia estática por ondas milimétricas (**Aqara FP2** sobre Wi-Fi local), contactos magnéticos de puertas/ventanas, enchufes con monitorización de potencia y termostatos inteligentes (**tado° X**).
-2. **Transporte:** Red local **Wi-Fi** (Aqara FP2), malla **Zigbee** (Aqara Hub M3) y malla **Thread / Matter** (tado° Bridge X).
-3. **Middleware:** **Home Assistant** unifica la telemetría heterogénea y envía el estado en JSON al servidor local cada minuto (o en actualizaciones parciales por evento).
-4. **Núcleo Inteligente (este repositorio):** API asíncrona en **FastAPI** protegida por `X-API-Key` (comparación en tiempo constante y modo *fail-closed*), persistencia en **SQLite (modo WAL)** con fusión recursiva (*Deep Update*) y motor híbrido Reglas → IA.
-5. **Notificación:** Bot de **Telegram** asíncrono (`httpx`) con alertas HTML escapadas de forma segura, soporte para alertas simultáneas, índice de gravedad IA y control atómico de *cooldown* (por defecto `300 s`).
-
-![Arquitectura del sistema](docs/images/arquitectura.png)
+> **Bachelor's Thesis (TFG)** — B.Sc. in Computer Engineering (Services and Applications)  
+> School of Computer Engineering of Segovia, University of Valladolid (2026)  
+> **Author:** Daniel López Iniesta
 
 ---
 
-## Motor de Decisión Híbrido
+## System Architecture
 
-Cada petición recibida en `POST /detect` (validada con esquemas estrictos de **Pydantic v2**) actualiza el estado persistente mediante *Deep Update* —conservando las claves no enviadas y evitando sobrescrituras por diccionarios vacíos— y pasa por dos capas secuenciales:
+The ecosystem is structured into **five decoupled layers** modeled with Domain-Driven Design (**DDD**: *Energy, Security, Comfort, Health, and Water*):
 
-### 1. Capa Determinista ([`src/core/rules.py`](src/core/rules.py))
+1. **Perception:** Millimeter-wave static presence radar (**Aqara FP2** over local Wi-Fi), magnetic door/window contact sensors, power-monitoring smart plugs, and smart thermostats (**tado° X**).
+2. **Transport:** Local **Wi-Fi** (Aqara FP2), **Zigbee** mesh (Aqara Hub M3), and **Thread / Matter** mesh (tado° Bridge X).
+3. **Middleware:** **Home Assistant** unifies heterogeneous protocols and forwards JSON home telemetry to the local server every minute (or via partial event-driven updates).
+4. **Intelligent Core (this repository):** Asynchronous **FastAPI** backend protected by `X-API-Key` (constant-time verification and fail-closed startup), **SQLite (WAL mode)** persistence with recursive state merging (*Deep Update*), and a hybrid Rules → AI decision engine.
+5. **Notification:** Asynchronous **Telegram** bot (`httpx`) delivering HTML-escaped rich alerts, simultaneous emergency reporting, AI severity labels, and atomic cooldown suppression (`300 s` default).
 
-Evalúa **todas** las reglas ordenadas por prioridad (sin ocultar emergencias simultáneas) con *bypass* inmediato a la capa predictiva:
+![System Architecture](docs/images/architecture.png)
 
-| Regla | Código | Condición técnica | Gravedad |
+---
+
+## Hybrid Decision Engine
+
+Every request sent to `POST /detect` (validated through strict **Pydantic v2** schemas) merges partial payloads into the persistent home state via *Deep Update*—preserving omitted fields and ignoring empty dictionaries—and runs through two sequential layers:
+
+### 1. Deterministic Layer ([`src/core/rules.py`](src/core/rules.py))
+
+Evaluates **all** business rules in priority order (without hiding simultaneous emergencies) and bypasses the AI model whenever a critical condition fires:
+
+| Rule | Code | Technical Condition | Severity |
 | :--- | :--- | :--- | :--- |
-| **Fuga crítica de agua** | `water_critical_high` | Caudal `> 15,0 L/min` | Crítica |
-| **Sobrecarga eléctrica** | `power_high` | Potencia global `>= 3500 W` | Crítica |
-| **Inactividad anómala** | `presence_no_motion` | Presencia en franja `08:00–22:00` con `> 3600 s` sin movimiento | Alta |
-| **Seguridad (olvido/intrusión)** | `security_element_open_away` | Vivienda vacía (`presence == 0`) con puerta o ventana abierta | Alta |
-| **Derroche térmico** | `efficiency_heating_window_open` | Calefacción encendida con ventana abierta | Moderada |
+| **Critical water leak** | `water_critical_high` | Water flow `> 15.0 L/min` | Critical |
+| **Electrical overload** | `power_high` | Global power `>= 3500 W` | Critical |
+| **Abnormal daytime immobility** | `presence_no_motion` | Presence (`08:00–22:00`) with `> 3600 s` since last motion | High |
+| **Unsecured home while away** | `security_element_open_away` | Empty home (`presence == 0`) with any open door or window | High |
+| **Thermal waste** | `efficiency_heating_window_open` | Heating ON with any open window | Moderate |
 
-### 2. Capa Predictiva ([`src/models/`](src/models/))
+### 2. Predictive Layer ([`src/models/`](src/models/))
 
-Si ninguna regla determinista salta, el estado se proyecta a **14 características** que combinan:
+If no deterministic rule triggers, the home state is projected into **14 features** combining:
 
-- **Perfil contextual no supervisado** (`fit_routine_profile`, ajustado únicamente sobre datos de entrenamiento por `(hora, fin_de_semana, presencia)`):
-  - Exceso robusto fuera del rango `[P01, P99]` para variables continuas (`water_L_per_min`, `power_W`).
-  - Autoinformación de Shannon (`-log P`) para variables binarias (`motion`, `window_open`, `door_open`, `heating_on`, `fp2_active`, `presence`) más agregados `max` y `sum`.
-- **Codificación temporal cíclica real:** `hour_sin`, `hour_cos`, `weekday_sin`, `weekday_cos`.
+- **Unsupervised contextual routine profile** (`fit_routine_profile`, fitted exclusively on training data grouped by `(hour, is_weekend, presence)`):
+  - Robust out-of-envelope excess beyond `[P01, P99]` for continuous sensors (`water_L_per_min`, `power_W`).
+  - Shannon self-information (`-log P`) for binary sensors (`motion`, `window_open`, `door_open`, `heating_on`, `fp2_active`, `presence`), plus `max` and `sum` aggregates.
+- **True cyclic time encoding:** `hour_sin`, `hour_cos`, `weekday_sin`, `weekday_cos`.
 
-El vector se evalúa en O(1) con **Isolation Forest** (`n_estimators=200`, `max_samples=2048`, `contamination=0,4 %`, sin `StandardScaler` al ser invariante para árboles paralelos a los ejes). En Telegram, el *score* negativo se reescala a una severidad interpretable en `[0, 1]` (`CRÍTICO > 0,75`, `ALTO 0,60–0,75`, `MODERADO <= 0,60`).
+Inference runs in O(1) using **Isolation Forest** (`n_estimators=200`, `max_samples=2048`, `contamination=0.4%`, without `StandardScaler` since axis-aligned random trees are invariant to per-feature affine scaling). In Telegram alerts, negative anomaly scores are rescaled to an interpretable `[0, 1]` severity index (`CRÍTICO > 0.75`, `ALTO 0.60–0.75`, `MODERADO <= 0.60`).
 
 ---
 
-## Evaluación Reproducible y Rendimiento
+## Reproducible Evaluation & Benchmarks
 
-El repositorio incluye un simulador anual por bloques realistas ([`src/simulate_yearly.py`](src/simulate_yearly.py), **525.600 minutos**) y un script de evaluación reproducible ([`src/models/evaluate.py`](src/models/evaluate.py)) que aplica un **split cronológico 80/20 sin fuga temporal**:
+The repository ships a block-based yearly telemetry simulator ([`src/simulate_yearly.py`](src/simulate_yearly.py), **525,600 minutes**) and a reproducible evaluation script ([`src/models/evaluate.py`](src/models/evaluate.py)) using a **leak-free chronological 80/20 split**:
 
-- **Entrenamiento (80 %):** `420.480` minutos de rutinas normales (sin etiquetas).
-- **Test (20 %):** `105.120` minutos con 6 escenarios de anomalías conductuales inyectadas **por debajo de los umbrales de `rules.py`** (`night_water_leak`, `away_or_night_power`, `night_door_or_window`, `heating_unusual`, `night_activity_burst`, `daytime_fp2_static_power`).
+- **Training (80%):** `420,480` minutes of unlabeled normal routines.
+- **Testing (20%):** `105,120` minutes with 6 injected behavioral anomaly scenarios **strictly below the deterministic thresholds of `rules.py`** (`night_water_leak`, `away_or_night_power`, `night_door_or_window`, `heating_unusual`, `night_activity_burst`, `daytime_fp2_static_power`).
 
-| Métrica | Resultado reproducible (`python -m src.models.evaluate`) |
+| Metric | Reproducible Result (`python -m src.models.evaluate`) |
 | :--- | :--- |
-| **Precision (IA)** | **84,75 %** (`TP: 2.100 · FP: 378`) |
-| **Recall (IA)** | **100,00 %** (`FN: 0` en los 6 escenarios conductuales) |
-| **F1-Score** | **0,9174** |
-| **FPR (Falsos Positivos)** | **0,367 %** (`TN: 102.642`) |
-| **ROC-AUC / PR-AUC** | **0,9987** / **0,9150** |
-| **Latencia `POST /detect` (reglas)** | **4,21 ms** media (`P95: 4,61 ms · Máx: 6,46 ms`, n=200) |
-| **Latencia `POST /detect` (reglas + IA)** | **9,84 ms** media (`P95: 10,18 ms · Máx: 21,87 ms`, n=200) |
-| **Suite de tests (`pytest`)** | **27 tests en verde** (API, auth, reglas, *Deep Update*, Telegram, ML) |
+| **Precision (AI)** | **84.75%** (`TP: 2,100 · FP: 378`) |
+| **Recall (AI)** | **100.00%** (`FN: 0` across all 6 behavioral scenarios) |
+| **F1-Score** | **0.9174** |
+| **False Positive Rate (FPR)** | **0.367%** (`TN: 102,642`) |
+| **ROC-AUC / PR-AUC** | **0.9987** / **0.9150** |
+| **`POST /detect` latency (rules bypass)** | **4.21 ms** avg (`P95: 4.61 ms · Max: 6.46 ms`, n=200) |
+| **`POST /detect` latency (rules + AI)** | **9.84 ms** avg (`P95: 10.18 ms · Max: 21.87 ms`, n=200) |
+| **Automated test suite (`pytest`)** | **27 passing tests** (API, auth, rules, *Deep Update*, Telegram, ML) |
 
 <p align="center">
-  <img src="docs/images/alerta_telegram.png" alt="Ejemplo de alerta en Telegram" width="320" />
+  <img src="docs/images/alerta_telegram.png" alt="Real Telegram alert screenshot" width="320" />
 </p>
 
 ---
 
-## Puesta en Marcha Local
+## Local Setup & Quickstart
 
-### 1. Clonar e instalar dependencias
+### 1. Clone and install dependencies
 ```bash
 git clone https://github.com/Danix595/smart-home-anomaly-detection.git
 cd smart-home-anomaly-detection
@@ -95,105 +99,108 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configurar variables de entorno
-Copia la plantilla y rellena tus credenciales (crea tu bot en Telegram con `@BotFather` y genera una clave secreta local para `API_KEY`):
+### 2. Configure environment variables
+Copy the template and set your credentials (create a Telegram bot with `@BotFather` and generate a local secret for `API_KEY`):
 ```bash
 cp .env.example .env
 ```
 
 ```env
-TELEGRAM_BOT_TOKEN="tu_token_de_botfather_aqui"
-TELEGRAM_CHAT_ID="tu_chat_id_aqui"
-API_KEY="genera_una_clave_secreta_local_aqui"
+TELEGRAM_BOT_TOKEN="your_botfather_token_here"
+TELEGRAM_CHAT_ID="your_chat_id_here"
+API_KEY="generate_a_local_secret_key_here"
 TELEGRAM_COOLDOWN_SECONDS="300"
 ```
 
-### 3. Generar dataset, entrenar y evaluar el modelo
+### 3. Generate dataset, train, and evaluate the model
 ```bash
 python -m src.simulate_yearly
 python -m src.models.train_isolation_forest
 python -m src.models.evaluate
 ```
 
-### 4. Arrancar la API y probar escenarios
+### 4. Start the API and run sample scenarios
 ```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-En otra terminal, lanza el cliente de pruebas (lee `API_KEY` desde `.env` y envía: emergencia determinista, anomalía conductual nocturna por IA y 10 lecturas normales):
+In a second terminal, run the test client (reads `API_KEY` from `.env` and sends a deterministic emergency, a 03:15 AM AI behavioral anomaly, and 10 normal readings):
 ```bash
 python scripts/send_test_data.py
 ```
 
-También puedes inspeccionar el *score* de una lectura concreta desde CLI:
+You can also inspect individual Isolation Forest scores from the CLI:
 ```bash
 python -m src.models.debug_predict 2026-07-02T03:15:00 6.5 1800 1 1 0 --door-open 1
 ```
 
-### 5. Ejecutar la suite de tests
+### 5. Run the test suite
 ```bash
 pytest -v
 ```
 
-### 6. Despliegue en Mini PC (Docker o `systemd` + Home Assistant)
+### 6. Mini PC Deployment (Docker or `systemd` + Home Assistant)
 
-Con **Docker Compose** (recomendado):
+With **Docker Compose** (recommended):
 ```bash
-cp .env.example .env   # Configura API_KEY, TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
+cp .env.example .env   # Configure API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_CHAT_ID
 docker compose up -d --build
 docker compose exec api python -m src.simulate_yearly
 docker compose exec api python -m src.models.train_isolation_forest
 docker compose restart api
 ```
 
-Para despliegue nativo en Linux o integración con **Home Assistant**, consulta las plantillas listas en [`deploy/`](deploy/):
-* [`deploy/domotica.service`](deploy/domotica.service) — Servicio `systemd` con arranque automático (`--host 127.0.0.1 --workers 1`).
-* [`deploy/home_assistant.yaml`](deploy/home_assistant.yaml) — Configuración de `rest_command` (con plantilla Jinja2 directa para evitar el límite de 255 caracteres de los sensores en HA) y automatización cada minuto.
+For native Linux deployment or **Home Assistant** integration, see the ready-to-use templates in [`deploy/`](deploy/):
+* [`deploy/domotica.service`](deploy/domotica.service) — `systemd` unit with auto-restart (`--host 127.0.0.1 --workers 1`).
+* [`deploy/home_assistant.yaml`](deploy/home_assistant.yaml) — `rest_command` (building JSON inline with Jinja2 to avoid Home Assistant's 255-character sensor state limit) plus a 1-minute automation.
 
 ---
 
-## Endpoints de la API
+## API Endpoints
 
-| Método | Endpoint | Auth | Descripción |
+| Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | No | *Healthcheck* ligero (`{"status": "online"}`) sin exponer telemetría privada. |
-| `GET` | `/state` | `X-API-Key` | Devuelve el último estado consolidado de la vivienda almacenado en SQLite. |
-| `POST` | `/detect` | `X-API-Key` | Valida telemetría JSON (completa o parcial), aplica *Deep Update*, evalúa reglas/IA y dispara alertas. |
+| `GET` | `/` | None | Lightweight healthcheck (`{"status": "online"}`) exposing no private home state. |
+| `GET` | `/state` | `X-API-Key` | Returns the latest consolidated home state persisted in SQLite. |
+| `POST` | `/detect` | `X-API-Key` | Validates full or partial JSON telemetry, applies *Deep Update*, evaluates rules/AI, and triggers alerts. |
 
-La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.0.0.1:8000/docs` al iniciar el servidor.
+Interactive OpenAPI (Swagger) documentation is available at `http://127.0.0.1:8000/docs` while the server is running.
 
 ---
 
-## Estructura del Repositorio
+## Repository Structure
 
 ```text
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                       # Integración continua (compileall + pytest)
+│       └── ci.yml                       # Continuous Integration (compileall + pytest)
 ├── deploy/
-│   ├── domotica.service                 # Plantilla de servicio systemd para Mini PC
-│   └── home_assistant.yaml              # Integración rest_command + automatización en HA
+│   ├── domotica.service                 # systemd service template for Mini PC
+│   └── home_assistant.yaml              # Home Assistant rest_command + automation
 ├── docs/
 │   ├── images/
-│   │   ├── alerta_telegram.png          # Captura real de alerta en Telegram
-│   │   └── arquitectura.png             # Diagrama de arquitectura y protocolos
-│   ├── Memoria_TFG.pdf                  # Memoria académica original del TFG
-│   └── Presentacion_TFG.pdf             # Diapositivas de la defensa
+│   │   ├── alerta_telegram.png          # Real Telegram alert screenshot
+│   │   ├── architecture.png             # System architecture diagram (EN)
+│   │   └── arquitectura.png             # System architecture diagram (ES)
+│   ├── Memoria_TFG.pdf                  # Original Bachelor's thesis report (in Spanish)
+│   └── Presentacion_TFG.pdf             # Thesis defense slides (in Spanish)
 ├── scripts/
-│   └── send_test_data.py                # Cliente de prueba (reglas, IA y lecturas normales)
+│   └── send_test_data.py                # Test client (rules, AI anomaly, and normal loop)
 ├── src/
-│   ├── api/                             # FastAPI (main, routes, schemas Pydantic y auth)
-│   ├── core/                            # Configuración (.env) y motor de reglas deterministas
-│   ├── db/                              # Persistencia SQLite WAL (home_state y cooldowns)
-│   ├── models/                          # Perfil contextual, entrenamiento, inferencia, evaluación y debug
-│   ├── services/                        # Cliente asíncrono de Telegram (httpx + escape HTML)
-│   └── simulate_yearly.py               # Simulador anual estocástico por bloques (525.600 min)
-├── tests/                               # Suite pytest (API, auth, reglas, Telegram y pipeline ML)
+│   ├── api/                             # FastAPI (main, routes, Pydantic schemas, auth)
+│   ├── core/                            # Environment config and deterministic rules
+│   ├── db/                              # SQLite WAL persistence (home_state & cooldowns)
+│   ├── models/                          # Contextual profile, training, inference, eval, debug
+│   ├── services/                        # Async Telegram client (httpx + HTML escaping)
+│   └── simulate_yearly.py               # Block-based stochastic yearly simulator (525,600 min)
+├── tests/                               # pytest suite (API, auth, rules, Telegram, ML)
 ├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── Dockerfile
 ├── LICENSE
+├── README.md                            # Main documentation (EN)
+├── README.es.md                         # Spanish documentation (ES)
 ├── docker-compose.yml
 ├── pytest.ini
 └── requirements.txt
@@ -201,19 +208,19 @@ La documentación interactiva OpenAPI (Swagger) queda disponible en `http://127.
 
 ---
 
-## Consideraciones para Producción y Roadmap
+## Production Considerations & Roadmap
 
-El repositorio mantiene el esquema ligero de dos tablas (`home_state` y `cooldowns`) diseñado para el TFG. Para pasar de un despliegue doméstico de vivienda única a un entorno de producción real con sensores físicos 24/7, los siguientes pasos clave son:
+This repository intentionally preserves the lightweight two-table SQLite schema (`home_state` and `cooldowns`) designed for the thesis. To evolve from a single-home prototype to a 24/7 production deployment with live hardware, the key next steps are:
 
-1. **Histórico de telemetría real para reentrenamiento:** añadir una tabla de histórico temporal (o exportación a Parquet/CSV) para recolectar 2–4 semanas de rutinas reales del residente y reentrenar el perfil contextual y el *Isolation Forest* con los hábitos verdaderos de esa vivienda.
-2. **Concurrencia multi-proceso:** actualmente el servidor debe ejecutarse con `--workers 1` porque los *locks* de estado y *cooldown* (`asyncio.Lock`) residen en memoria. Para escalar a múltiples viviendas/edificios, el paso natural es migrar a **PostgreSQL + Redis** (para *locks* distribuidos y *rate limiting*).
-3. **Cifrado en tránsito en LAN:** cuando Home Assistant y la API corren en el mismo Mini PC, el enlace se restringe a `127.0.0.1`. Si se despliegan en máquinas separadas, se recomienda situar un *reverse proxy* con **HTTPS/TLS** (Caddy o Nginx) delante de Uvicorn para proteger la cabecera `X-API-Key`.
+1. **Real telemetry history for model retraining:** add a time-series history table (or Parquet/CSV export) to collect 2–4 weeks of actual resident routines and retrain the contextual profile and Isolation Forest on real household patterns.
+2. **Multi-worker concurrency:** the server currently runs with `--workers 1` because state and cooldown `asyncio.Lock` primitives live in memory. Scaling to multi-unit buildings would migrate persistence and locking to **PostgreSQL + Redis**.
+3. **Transport encryption on LAN:** when Home Assistant and this API share the same Mini PC, binding is restricted to `127.0.0.1`. For separate hosts on a LAN, place an **HTTPS/TLS reverse proxy** (Caddy or Nginx) in front of Uvicorn to protect `X-API-Key` headers in transit.
 
 ---
 
-## Documentación Académica (TFG)
+## Academic Documentation (Bachelor's Thesis)
 
-* 📄 **[Memoria completa del TFG (PDF)](docs/Memoria_TFG.pdf)** — Análisis de requisitos, diseño, RGPD y manuales de instalación y usuario.
-* 📊 **[Presentación de la defensa (PDF)](docs/Presentacion_TFG.pdf)** — Resumen ejecutivo y visual del proyecto.
+* 📄 **[Full Thesis Report — `Memoria_TFG.pdf`](docs/Memoria_TFG.pdf)** *(in Spanish)* — Requirements analysis, system design, GDPR assessment, and installation/user manuals.
+* 📊 **[Defense Slides — `Presentacion_TFG.pdf`](docs/Presentacion_TFG.pdf)** *(in Spanish)* — Executive and visual overview of the project.
 
-> **Nota de mantenimiento:** Los PDFs en `docs/` se conservan intactos como registro histórico de la entrega universitaria (julio de 2026). El código de este repositorio incorpora mejoras posteriores de endurecimiento de seguridad, concurrencia en SQLite/Telegram, ampliación del modelo ML con evaluación reproducible sin fuga temporal y cobertura de tests automatizados.
+> **Maintenance note:** The PDFs in `docs/` are preserved unmodified as the historical university submission (July 2026). The codebase in this repository includes subsequent improvements in security hardening, SQLite/Telegram concurrency, contextual ML feature engineering with leak-free reproducible evaluation, Docker packaging, and automated test coverage.
